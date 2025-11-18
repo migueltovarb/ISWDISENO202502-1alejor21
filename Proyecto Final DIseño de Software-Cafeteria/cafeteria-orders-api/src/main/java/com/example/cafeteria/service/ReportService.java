@@ -24,11 +24,14 @@ public class ReportService {
     public Map<String, Object> dailyReport(LocalDate date) {
         Instant start = date.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant end = date.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+
         List<Order> orders = orderRepository.findByCreatedAtBetween(start, end);
 
         int totalOrders = orders.size();
+
+        // totalAmount es double → convertimos a BigDecimal
         BigDecimal totalIncome = orders.stream()
-                .map(Order::getTotalAmount)
+                .map(order -> BigDecimal.valueOf(order.getTotalAmount()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Object> result = new HashMap<>();

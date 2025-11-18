@@ -1,60 +1,52 @@
 package com.example.cafeteria.web;
 
 import com.example.cafeteria.domain.Product;
-import com.example.cafeteria.domain.ProductCategory;
 import com.example.cafeteria.service.ProductService;
-import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-import java.net.URI;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/products")
-@CrossOrigin
+@CrossOrigin(origins = "*")
+@RequiredArgsConstructor
 public class ProductController {
 
     private final ProductService productService;
 
-    public ProductController(ProductService productService) {
-        this.productService = productService;
-    }
-
-    @PostMapping
-    public ResponseEntity<Product> create(@Valid @RequestBody Product product) {
-        Product created = productService.save(product);
-        return ResponseEntity.created(URI.create("/api/products/" + created.getId())).body(created);
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<Product> update(@PathVariable String id,
-                                          @Valid @RequestBody Product product) {
-        product.setId(id);
-        Product updated = productService.save(product);
-        return ResponseEntity.ok(updated);
-    }
-
+    // HU002: visualizar menú con filtros
     @GetMapping
-    public List<Product> listActive() {
-        return productService.listAllActive();
-    }
-
-    @GetMapping("/category/{category}")
-    public List<Product> listByCategory(@PathVariable ProductCategory category) {
-        return productService.listByCategory(category);
+    public List<Product> list(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search
+    ) {
+        return productService.list(category, search);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Product> get(@PathVariable String id) {
-        return productService.findById(id)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public Product findById(@PathVariable String id) {
+        return productService.findById(id);
     }
 
+    // HU001: registrar productos
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public Product create(@RequestBody Product product) {
+        return productService.create(product);
+    }
+
+    // HU001: editar productos
+    @PutMapping("/{id}")
+    public Product update(@PathVariable String id, @RequestBody Product product) {
+        return productService.update(id, product);
+    }
+
+    // HU001: eliminar (lógico)
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable String id) {
         productService.delete(id);
-        return ResponseEntity.noContent().build();
     }
 }

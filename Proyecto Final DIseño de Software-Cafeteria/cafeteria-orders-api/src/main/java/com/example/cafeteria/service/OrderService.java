@@ -1,136 +1,183 @@
 package com.example.cafeteria.service;
 
-import com.example.cafeteria.domain.*;
+import com.example.cafeteria.domain.Order;
+import com.example.cafeteria.domain.OrderItem;
+import com.example.cafeteria.domain.OrderStatus;
+import com.example.cafeteria.domain.OrderStatusChange;
 import com.example.cafeteria.repository.OrderRepository;
-import com.example.cafeteria.repository.ProductRepository;
-import com.example.cafeteria.repository.PromotionRepository;
-import jakarta.validation.ValidationException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.Assert;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final ProductRepository productRepository;
-    private final PromotionRepository promotionRepository;
 
-    public OrderService(OrderRepository orderRepository,
-                        ProductRepository productRepository,
-                        PromotionRepository promotionRepository) {
-        this.orderRepository = orderRepository;
-        this.productRepository = productRepository;
-        this.promotionRepository = promotionRepository;
+    // Flujo permitido de estados
+    private static final List<OrderStatus> ORDER_FLOW = Arrays.asList(
+            OrderStatus.PENDING,
+            OrderStatus.PREPARING,
+            OrderStatus.READY,
+            OrderStatus.DELIVERED
+    );
+
+    public List<Order> findAll() {
+        return orderRepository.findAll();
     }
 
-    @Transactional
-    public Order createOrder(Order order) {
-        if (order.getItems() == null || order.getItems().isEmpty()) {
-            throw new ValidationException("Order must contain at least one item");
+    public Order findById(String id) {
+        return orderRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + id));
+    }
+
+    // 🔎 HU007: buscar por estado
+    public List<Order> findByStatus(OrderStatus status) {
+        return orderRepository.findByStatus(status);
+    }
+
+    // 🔎 HU007: buscar por rango de fechas
+    public List<Order> findByDateRange(Instant start, Instant end) {
+        return orderRepository.findByCreatedAtBetween(start, end);
+    }
+
+    // Crear pedido (HU003, HU004, HU006, HU005 inicio)
+    public Order create(Order order) {
+        order.setId(null);
+        Instant now = Instant.now();
+        order.setCreatedAt(now);
+        order.setUpdatedAt(now);
+        order.setStatus(OrderStatus.PENDING);
+
+        if (order.getItems() == null) {
+            order.setItems(new ArrayList<>());
         }
 
-        order.setOrderNumber(generateOrderNumber());
-        order.setStatus(OrderStatus.PENDING);
-        order.setCreatedAt(Instant.now());
-        order.setUpdatedAt(Instant.now());
-        calculateTotals(order);
-        applyPromotions(order);
-        order.setEstimatedTimeMinutes(estimateTimeMinutes(order));
+        // Total con BigDecimal (unitPrice es BigDecimal)
+        BigDecimal total = order.getItems().stream()
+                .map(i -> i.getUnitPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        order.setTotalAmount(total.doubleValue());
+
+        // Tiempo estimado muy simple
+        int baseTime = 5;   // minutos base
+        int perItem = 2;    // minutos por unidad
+        int itemCount = order.getItems().stream()
+                .mapToInt(OrderItem::getQuantity)
+                .sum();
+        order.setEstimatedTimeMinutes(baseTime + perItem * itemCount);
+
+        // Historial de estados
+        if (order.getStatusHistory() == null) {
+            order.setStatusHistory(new ArrayList<>());
+        }
+
+        OrderStatusChange firstChange = OrderStatusChange.builder()
+                .fromStatus(null)
+                .toStatus(OrderStatus.PENDING)
+                .changedAt(now)
+                .changedBy(order.getEmployeeId())
+                .build();
+
+        order.getStatusHistory().add(firstChange);
 
         return orderRepository.save(order);
     }
 
-    @Transactional
-    public Optional<Order> updateOrderBeforePreparation(String id, Order updated) {
-        Optional<Order> existingOpt = orderRepository.findById(id);
-        if (existingOpt.isEmpty()) {
-            return Optional.empty();
-        }
-        Order existing = existingOpt.get();
+    // Editar pedido solo si está en PENDING (HU004)
+    public Order update(String id, Order updated) {
+        Order existing = findById(id);
+
         if (existing.getStatus() != OrderStatus.PENDING) {
-            throw new ValidationException("Only pending orders can be modified");
+            throw new IllegalStateException("Solo se pueden modificar pedidos en estado PENDING");
         }
 
         existing.setCustomerName(updated.getCustomerName());
         existing.setCustomerId(updated.getCustomerId());
-        existing.setItems(updated.getItems());
         existing.setPaymentMethod(updated.getPaymentMethod());
-        existing.setUpdatedAt(Instant.now());
-        calculateTotals(existing);
-        applyPromotions(existing);
-        existing.setEstimatedTimeMinutes(estimateTimeMinutes(existing));
+        existing.setItems(updated.getItems());
 
-        return Optional.of(orderRepository.save(existing));
-    }
-
-    @Transactional
-    public Optional<Order> updateStatus(String id, OrderStatus status) {
-        Optional<Order> existingOpt = orderRepository.findById(id);
-        if (existingOpt.isEmpty()) {
-            return Optional.empty();
-        }
-        Order existing = existingOpt.get();
-        existing.setStatus(status);
-        existing.setUpdatedAt(Instant.now());
-        return Optional.of(orderRepository.save(existing));
-    }
-
-    public List<Order> listAll() {
-        return orderRepository.findAll();
-    }
-
-    public Optional<Order> findById(String id) {
-        return orderRepository.findById(id);
-    }
-
-    private void calculateTotals(Order order) {
-        BigDecimal total = BigDecimal.ZERO;
-
-        for (OrderItem item : order.getItems()) {
-            Product product = productRepository.findById(item.getProductId())
-                    .orElseThrow(() -> new ValidationException("Product not found: " + item.getProductId()));
-            item.setProductName(product.getName());
-            item.setCategory(product.getCategory());
-            item.setUnitPrice(product.getUnitPrice());
-            BigDecimal subtotal = product.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
-            item.setSubtotal(subtotal);
-            total = total.add(subtotal);
+        if (existing.getItems() == null) {
+            existing.setItems(new ArrayList<>());
         }
 
-        order.setTotalAmount(total);
-    }
+        BigDecimal total = existing.getItems().stream()
+                .map(i -> i.getUnitPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-    private void applyPromotions(Order order) {
-        List<Promotion> promotions = promotionRepository.findByActiveTrue();
-        if (promotions.isEmpty()) {
-            return;
-        }
+        existing.setTotalAmount(total.doubleValue());
 
-        Promotion promo = promotions.get(0);
-        BigDecimal discount = order.getTotalAmount()
-                .multiply(promo.getDiscountPercentage())
-                .divide(BigDecimal.valueOf(100));
-        order.setTotalAmount(order.getTotalAmount().subtract(discount));
-        order.setPromotionDescription(promo.getName());
-    }
-
-    private int estimateTimeMinutes(Order order) {
-        int base = 5;
-        int perItem = order.getItems().stream()
+        int baseTime = 5;
+        int perItem = 2;
+        int itemCount = existing.getItems().stream()
                 .mapToInt(OrderItem::getQuantity)
                 .sum();
-        int estimate = base + perItem * 2;
-        return Math.min(estimate, 45);
+        existing.setEstimatedTimeMinutes(baseTime + perItem * itemCount);
+
+        existing.setUpdatedAt(Instant.now());
+
+        return orderRepository.save(existing);
     }
 
-    private String generateOrderNumber() {
-        String uuid = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        return "ORD-" + uuid;
+    // ❌ HU004: ahora sí, solo borrar si está en PENDING
+    public void delete(String id) {
+        Order order = findById(id);
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new IllegalStateException("Solo se pueden eliminar pedidos en estado PENDING");
+        }
+        orderRepository.deleteById(id);
+    }
+
+    // Cambiar estado respetando el flujo y registrando historial
+    public Order updateStatus(String orderId, OrderStatus newStatus, String changedBy) {
+        Order order = findById(orderId);
+
+        OrderStatus current = order.getStatus();
+        Assert.notNull(current, "Current order status must not be null");
+
+        int currentIndex = ORDER_FLOW.indexOf(current);
+        int newIndex = ORDER_FLOW.indexOf(newStatus);
+
+        if (newIndex < 0) {
+            throw new IllegalArgumentException("Estado inválido: " + newStatus);
+        }
+
+        if (newIndex < currentIndex) {
+            throw new IllegalStateException("No se puede retroceder el estado del pedido");
+        }
+
+        if (newIndex == currentIndex) {
+            return order;
+        }
+
+        order.setStatus(newStatus);
+        order.setUpdatedAt(Instant.now());
+
+        if (order.getStatusHistory() == null) {
+            order.setStatusHistory(new ArrayList<>());
+        }
+
+        OrderStatusChange change = OrderStatusChange.builder()
+                .fromStatus(current)
+                .toStatus(newStatus)
+                .changedAt(order.getUpdatedAt())
+                .changedBy(changedBy)
+                .build();
+
+        order.getStatusHistory().add(change);
+
+        if (newStatus == OrderStatus.READY) {
+            order.setEstimatedTimeMinutes(0);
+        }
+
+        return orderRepository.save(order);
     }
 }

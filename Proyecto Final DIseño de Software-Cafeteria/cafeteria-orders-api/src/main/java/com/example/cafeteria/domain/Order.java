@@ -1,31 +1,52 @@
 package com.example.cafeteria.domain;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
-@Document(collection = "orders")
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Document("orders")
 public class Order {
 
     @Id
     private String id;
 
     private String orderNumber;
+
     private String customerName;
     private String customerId;
-    private List<OrderItem> items;
-    private BigDecimal totalAmount;
+
+    @Builder.Default
+    private List<OrderItem> items = new ArrayList<>();
+
+    // total en dinero (double para que sea simple)
+    private double totalAmount;
+
+    private OrderStatus status;
+
     private Instant createdAt;
     private Instant updatedAt;
-    private PaymentMethod paymentMethod;
-    private OrderStatus status;
+
+    private String paymentMethod;   // ONLINE, CASH, etc.
+    private String employeeId;      // id del empleado/cajero
+    private String shift;           // turno: mañana / tarde / noche
+
+    // tiempo estimado en minutos
     private Integer estimatedTimeMinutes;
-    private String employeeId;
-    private String shift;
+
+    // promo aplicada si usas promociones
     private String promotionDescription;
+
+    @Builder.Default
+    private List<OrderStatusChange> statusHistory = new ArrayList<>();
 }
