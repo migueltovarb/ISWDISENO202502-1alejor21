@@ -22,7 +22,7 @@ public class DataInitializer {
                 User admin = new User();
                 admin.setUsername("admin");
                 admin.setPassword("admin123");
-                admin.setFullName("Administrador");
+                admin.setFullName("Administrador del Sistema");
                 admin.setEmail("admin@cafeteria.com");
                 admin.setRole(UserRole.ADMIN);
                 admin.setActive(true);
@@ -30,15 +30,33 @@ public class DataInitializer {
                 User employee = new User();
                 employee.setUsername("empleado");
                 employee.setPassword("emp123");
-                employee.setFullName("Juan Empleado");
+                employee.setFullName("Juan Empleado Cajero");
                 employee.setEmail("empleado@cafeteria.com");
                 employee.setRole(UserRole.EMPLOYEE);
                 employee.setActive(true);
 
-                userRepository.saveAll(List.of(admin, employee));
+                User student = new User();
+                student.setUsername("estudiante");
+                student.setPassword("est123");
+                student.setFullName("María Estudiante");
+                student.setEmail("maria.estudiante@campus.edu");
+                student.setRole(UserRole.STUDENT);
+                student.setActive(true);
+
+                User staff = new User();
+                staff.setUsername("personal");
+                staff.setPassword("per123");
+                staff.setFullName("Carlos Personal Campus");
+                staff.setEmail("carlos.personal@campus.edu");
+                staff.setRole(UserRole.STAFF);
+                staff.setActive(true);
+
+                userRepository.saveAll(List.of(admin, employee, student, staff));
                 System.out.println("✅ Usuarios de prueba creados:");
                 System.out.println("   - Admin: username=admin, password=admin123");
-                System.out.println("   - Empleado: username=empleado, password=emp123");
+                System.out.println("   - Empleado/Cajero: username=empleado, password=emp123");
+                System.out.println("   - Estudiante: username=estudiante, password=est123");
+                System.out.println("   - Personal Campus: username=personal, password=per123");
             }
 
             // Inicializar productos de prueba si no existen

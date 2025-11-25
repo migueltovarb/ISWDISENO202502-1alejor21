@@ -18,6 +18,17 @@ const PAYMENT_METHODS = [
   { value: 'ONLINE', label: 'En Línea', icon: '📱' }
 ]
 
+// Función helper para obtener info del rol
+const getRoleDisplay = (role) => {
+  const roles = {
+    'ADMIN': { icon: '⚙️', label: 'Administrador' },
+    'EMPLOYEE': { icon: '👤', label: 'Empleado' },
+    'STUDENT': { icon: '🎓', label: 'Estudiante' },
+    'STAFF': { icon: '👔', label: 'Personal Campus' }
+  }
+  return roles[role] || { icon: '👤', label: role }
+}
+
 export const OrdersPage = () => {
   const [view, setView] = useState('list') // 'list' o 'create'
   const [orders, setOrders] = useState([])
@@ -141,7 +152,11 @@ export const OrdersPage = () => {
     try {
       const orderData = {
         ...orderForm,
-        items: cart
+        items: cart,
+        // Si es cliente (STUDENT/STAFF), usar su propio ID como customerId
+        customerId: isCustomer ? user?.id : orderForm.customerId,
+        customerName: isCustomer ? user?.fullName || user?.username : orderForm.customerName,
+        employeeId: user?.id || 'guest' // Asignar empleado que crea el pedido
       }
 
       await ordersAPI.create(orderData)
@@ -185,6 +200,26 @@ export const OrdersPage = () => {
     }
   }
 
+  const handleCancelOrder = async (orderId, orderNumber) => {
+    const reason = prompt(`¿Por qué deseas cancelar el pedido ${orderNumber}?`, 'Cancelado por el empleado')
+    if (!reason) return
+
+    setLoading(true)
+    setError('')
+
+    try {
+      await ordersAPI.cancel(orderId, {
+        cancelledBy: user?.username || 'Sistema',
+        reason: reason
+      })
+      await loadOrders()
+    } catch (err) {
+      setError(handleAPIError(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const getStatusData = (status) => {
     return ORDER_STATUSES.find(s => s.value === status) || ORDER_STATUSES[0]
   }
@@ -193,10 +228,23 @@ export const OrdersPage = () => {
     return PAYMENT_METHODS.find(m => m.value === method) || PAYMENT_METHODS[0]
   }
 
+  // Determinar si el usuario puede gestionar pedidos (cambiar estados)
+  const canManageOrders = user?.role === 'ADMIN' || user?.role === 'EMPLOYEE'
+  
+  // Determinar si es cliente (estudiante o personal)
+  const isCustomer = user?.role === 'STUDENT' || user?.role === 'STAFF'
+
+  // Filtrar pedidos según el rol
+  const displayOrders = isCustomer 
+    ? orders.filter(order => order.customerId === user?.id)
+    : orders
+
   return (
     <section className="section">
       <div className="page-header">
-        <h1 className="page-title">🛍️ Gestión de Pedidos</h1>
+        <h1 className="page-title">
+          {canManageOrders ? '🛍️ Gestión de Pedidos' : '🛍️ Mis Pedidos'}
+        </h1>
         <p className="page-description">Crea y administra los pedidos de tus clientes</p>
       </div>
 
@@ -208,12 +256,16 @@ export const OrdersPage = () => {
         >
           📋 Lista de Pedidos
         </button>
-        <button
-          className={`button ${view === 'create' ? 'primary' : 'secondary'}`}
-          onClick={() => setView('create')}
-        >
-          ➕ Crear Nuevo Pedido
-        </button>
+        
+        {/* Solo clientes (STUDENT/STAFF) pueden crear pedidos */}
+        {isCustomer && (
+          <button
+            className={`button ${view === 'create' ? 'primary' : 'secondary'}`}
+            onClick={() => setView('create')}
+          >
+            ➕ Crear Nuevo Pedido
+          </button>
+        )}
       </div>
 
       {error && <ErrorMessage message={error} onClose={() => setError('')} />}
@@ -232,33 +284,52 @@ export const OrdersPage = () => {
           <form onSubmit={handleCreateOrder}>
             {/* Información del cliente */}
             <div className="form-section">
-              <h3 className="form-section-title">📝 Información del Cliente</h3>
+              <h3 className="form-section-title">📝 Información del Pedido</h3>
+              
+              {/* STUDENT/STAFF: auto-llenar con sus datos */}
+              {isCustomer && (
+                <div className="customer-info-display" style={{
+                  backgroundColor: '#f3f4f6',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  marginBottom: '16px'
+                }}>
+                  <p><strong>Cliente:</strong> {user?.fullName || user?.username}</p>
+                  <p><strong>Tipo:</strong> {getRoleDisplay(user?.role).label}</p>
+                </div>
+              )}
+              
+              {/* ADMIN/EMPLOYEE: pueden ingresar datos del cliente manualmente */}
+              {canManageOrders && (
+                <div className="form-grid">
+                  <label className="label">
+                    Nombre del cliente *
+                    <input
+                      type="text"
+                      name="customerName"
+                      className="input"
+                      value={orderForm.customerName}
+                      onChange={handleOrderFormChange}
+                      placeholder="Ej: Juan Pérez"
+                      required
+                    />
+                  </label>
+
+                  <label className="label">
+                    Identificación del cliente
+                    <input
+                      type="text"
+                      name="customerId"
+                      className="input"
+                      value={orderForm.customerId}
+                      onChange={handleOrderFormChange}
+                      placeholder="ID o código del cliente"
+                    />
+                  </label>
+                </div>
+              )}
+
               <div className="form-grid">
-                <label className="label">
-                  Nombre del cliente *
-                  <input
-                    type="text"
-                    name="customerName"
-                    className="input"
-                    value={orderForm.customerName}
-                    onChange={handleOrderFormChange}
-                    placeholder="Ej: Juan Pérez"
-                    required
-                  />
-                </label>
-
-                <label className="label">
-                  Identificación
-                  <input
-                    type="text"
-                    name="customerId"
-                    className="input"
-                    value={orderForm.customerId}
-                    onChange={handleOrderFormChange}
-                    placeholder="Opcional"
-                  />
-                </label>
-
                 <label className="label">
                   Método de pago *
                   <select
@@ -417,19 +488,23 @@ export const OrdersPage = () => {
             </button>
           </div>
 
-          {loading && orders.length === 0 && <LoadingSpinner />}
+          {loading && displayOrders.length === 0 && <LoadingSpinner />}
 
-          {!loading && orders.length === 0 && (
+          {!loading && displayOrders.length === 0 && (
             <div className="empty-state">
               <div className="empty-icon">📝</div>
-              <p className="empty-text">No hay pedidos registrados</p>
-              <p className="empty-hint">Crea tu primer pedido usando el botón de arriba</p>
+              <p className="empty-text">
+                {isCustomer ? 'No tienes pedidos activos' : 'No hay pedidos registrados'}
+              </p>
+              <p className="empty-hint">
+                {isCustomer && 'Crea tu primer pedido usando el botón de arriba'}
+              </p>
             </div>
           )}
 
-          {orders.length > 0 && (
+          {displayOrders.length > 0 && (
             <div className="orders-list">
-              {orders.map(order => {
+              {displayOrders.map(order => {
                 const statusData = getStatusData(order.status)
                 const paymentData = getPaymentMethodData(order.paymentMethod)
                 const canAdvance = statusData.nextStatus !== null
@@ -445,9 +520,9 @@ export const OrdersPage = () => {
                       </div>
                       <span
                         className="order-status-badge"
-                        style={{ backgroundColor: statusData.color }}
+                        style={{ backgroundColor: order.cancelled ? '#ef4444' : statusData.color }}
                       >
-                        {statusData.label}
+                        {order.cancelled ? '❌ CANCELADO' : statusData.label}
                       </span>
                     </div>
 
@@ -466,6 +541,20 @@ export const OrdersPage = () => {
                         <span className="detail-label">{paymentData.icon} Pago:</span>
                         <span className="detail-value">{paymentData.label}</span>
                       </div>
+                      {order.discountPercentage && (
+                        <div className="order-detail-row" style={{ color: '#10b981', fontWeight: 'bold' }}>
+                          <span className="detail-label">🎉 Descuento:</span>
+                          <span className="detail-value">
+                            {order.discountPercentage}% OFF (-${order.discountAmount?.toFixed(2)})
+                          </span>
+                        </div>
+                      )}
+                      {order.promotionDescription && (
+                        <div className="order-detail-row" style={{ color: '#10b981', fontSize: '0.9em' }}>
+                          <span className="detail-label"></span>
+                          <span className="detail-value">{order.promotionDescription}</span>
+                        </div>
+                      )}
                       <div className="order-detail-row">
                         <span className="detail-label">💰 Total:</span>
                         <span className="detail-value total">${order.totalAmount?.toFixed(2) || '0.00'}</span>
@@ -482,6 +571,12 @@ export const OrdersPage = () => {
                           <span className="detail-value">
                             {new Date(order.createdAt).toLocaleString('es-ES')}
                           </span>
+                        </div>
+                      )}
+                      {order.cancelled && order.cancelReason && (
+                        <div className="order-detail-row" style={{ color: '#ef4444', fontSize: '0.9em' }}>
+                          <span className="detail-label">❌ Razón:</span>
+                          <span className="detail-value">{order.cancelReason}</span>
                         </div>
                       )}
                     </div>
@@ -508,7 +603,8 @@ export const OrdersPage = () => {
                         👁️ Ver Detalle
                       </button>
                       
-                      {canAdvance && (
+                      {/* Solo ADMIN/EMPLOYEE pueden gestionar estados */}
+                      {canManageOrders && !order.cancelled && canAdvance && (
                         <button
                           className="button small primary"
                           onClick={() => handleUpdateStatus(order.id, order.status)}
@@ -518,15 +614,46 @@ export const OrdersPage = () => {
                         </button>
                       )}
 
-                      {order.status === 'READY' && (
-                        <div className="ready-indicator">
-                          ✅ Listo para recoger
+                      {/* Solo ADMIN/EMPLOYEE pueden cancelar pedidos PENDING */}
+                      {canManageOrders && !order.cancelled && order.status === 'PENDING' && (
+                        <button
+                          className="button small danger"
+                          onClick={() => handleCancelOrder(order.id, order.orderNumber || order.id?.substring(0, 8))}
+                          disabled={loading}
+                        >
+                          ❌ Cancelar Pedido
+                        </button>
+                      )}
+
+                      {/* Notificación para clientes cuando está listo */}
+                      {isCustomer && !order.cancelled && order.status === 'READY' && (
+                        <div className="ready-indicator" style={{ 
+                          animation: 'pulse 2s infinite',
+                          backgroundColor: '#10b981',
+                          color: 'white',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          fontWeight: 'bold'
+                        }}>
+                          🔔 ¡Tu pedido está listo! Recógelo en ventanilla
                         </div>
                       )}
 
-                      {order.status === 'DELIVERED' && (
+                      {order.status === 'DELIVERED' && !order.cancelled && (
                         <div className="delivered-indicator">
                           ✔️ Completado
+                        </div>
+                      )}
+
+                      {order.cancelled && (
+                        <div className="cancelled-indicator" style={{
+                          backgroundColor: '#fee2e2',
+                          color: '#ef4444',
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          fontWeight: 'bold'
+                        }}>
+                          ❌ Pedido cancelado
                         </div>
                       )}
                     </div>

@@ -135,6 +135,18 @@ export const OrderDetailPage = () => {
                     : 'N/A'}
                 </span>
               </div>
+              {order.estimatedTimeMinutes && (
+                <div className="receipt-info-row">
+                  <span className="info-label">⏱️ Tiempo estimado:</span>
+                  <span className="info-value">{order.estimatedTimeMinutes} minutos</span>
+                </div>
+              )}
+              {order.paymentMethod && (
+                <div className="receipt-info-row">
+                  <span className="info-label">Método de pago:</span>
+                  <span className="info-value">{order.paymentMethod}</span>
+                </div>
+              )}
             </div>
           </div>
 

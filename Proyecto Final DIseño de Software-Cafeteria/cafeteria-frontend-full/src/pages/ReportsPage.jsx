@@ -331,6 +331,51 @@ export const ReportsPage = () => {
                       })}
                     </div>
                   </div>
+
+                  {/* Ventas por turno */}
+                  {dailyReport.shiftSales && (
+                    <div className="card glass-card">
+                      <div className="card-title">🕐 Ventas por Turno</div>
+                      <div className="shift-grid">
+                        {Object.entries(dailyReport.shiftSales.count || {}).map(([shift, count]) => {
+                          const income = dailyReport.shiftSales.income?.[shift] || 0
+                          return (
+                            <div key={shift} className="shift-card">
+                              <div className="shift-icon">
+                                {shift === 'MAÑANA' ? '🌅' : shift === 'TARDE' ? '🌞' : '🌙'}
+                              </div>
+                              <div className="shift-name">{shift}</div>
+                              <div className="shift-count">{count} pedidos</div>
+                              <div className="shift-total">${(income || 0).toFixed(2)}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ventas por empleado */}
+                  {dailyReport.employeeSales && (
+                    <div className="card glass-card">
+                      <div className="card-title">👥 Ventas por Empleado</div>
+                      <div className="employee-list">
+                        {Object.entries(dailyReport.employeeSales.count || {}).map(([employeeId, count]) => {
+                          const income = dailyReport.employeeSales.income?.[employeeId] || 0
+                          return (
+                            <div key={employeeId} className="employee-item">
+                              <div className="employee-icon">👤</div>
+                              <div className="employee-info">
+                                <div className="employee-id">{employeeId}</div>
+                                <div className="employee-stats">
+                                  {count} pedidos • ${(income || 0).toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 

@@ -13,6 +13,18 @@ export const Navbar = () => {
 
   const isActive = (path) => location.pathname === path
 
+  const getRoleDisplay = (role) => {
+    const roles = {
+      'ADMIN': { icon: '⚙️', label: 'Administrador' },
+      'EMPLOYEE': { icon: '👤', label: 'Empleado' },
+      'STUDENT': { icon: '🎓', label: 'Estudiante' },
+      'STAFF': { icon: '👔', label: 'Personal Campus' }
+    }
+    return roles[role] || { icon: '👤', label: role }
+  }
+
+  const roleInfo = user ? getRoleDisplay(user.role) : null
+
   return (
     <nav className="navbar">
       <div className="navbar-container">
@@ -25,6 +37,7 @@ export const Navbar = () => {
         </Link>
 
         <div className="navbar-links">
+          {/* Pedidos: todos pueden verlos */}
           <Link
             to="/orders"
             className={`nav-link ${isActive('/orders') ? 'active' : ''}`}
@@ -33,32 +46,37 @@ export const Navbar = () => {
             <span>Pedidos</span>
           </Link>
 
-          {isAdmin() && (
-            <>
-              <Link
-                to="/products"
-                className={`nav-link ${isActive('/products') ? 'active' : ''}`}
-              >
-                <span className="nav-icon">🍽️</span>
-                <span>Productos</span>
-              </Link>
+          {/* Productos: solo ADMIN puede gestionar */}
+          {user?.role === 'ADMIN' && (
+            <Link
+              to="/products"
+              className={`nav-link ${isActive('/products') ? 'active' : ''}`}
+            >
+              <span className="nav-icon">🍽️</span>
+              <span>Productos</span>
+            </Link>
+          )}
 
-              <Link
-                to="/users"
-                className={`nav-link ${isActive('/users') ? 'active' : ''}`}
-              >
-                <span className="nav-icon">👥</span>
-                <span>Usuarios</span>
-              </Link>
+          {/* Usuarios: solo ADMIN */}
+          {user?.role === 'ADMIN' && (
+            <Link
+              to="/users"
+              className={`nav-link ${isActive('/users') ? 'active' : ''}`}
+            >
+              <span className="nav-icon">👥</span>
+              <span>Usuarios</span>
+            </Link>
+          )}
 
-              <Link
-                to="/reports"
-                className={`nav-link ${isActive('/reports') ? 'active' : ''}`}
-              >
-                <span className="nav-icon">📊</span>
-                <span>Reportes</span>
-              </Link>
-            </>
+          {/* Reportes: ADMIN y EMPLOYEE */}
+          {(user?.role === 'ADMIN' || user?.role === 'EMPLOYEE') && (
+            <Link
+              to="/reports"
+              className={`nav-link ${isActive('/reports') ? 'active' : ''}`}
+            >
+              <span className="nav-icon">📊</span>
+              <span>Reportes</span>
+            </Link>
           )}
         </div>
 
@@ -66,10 +84,10 @@ export const Navbar = () => {
           {user ? (
             <>
               <div className="user-info">
-                <span className="user-icon">👤</span>
+                <span className="user-icon">{roleInfo.icon}</span>
                 <div className="user-details">
                   <span className="user-name">{user.fullName || user.username}</span>
-                  <span className="user-role">{user.role}</span>
+                  <span className="user-role">{roleInfo.label}</span>
                 </div>
               </div>
               <button className="btn-logout" onClick={handleLogout}>

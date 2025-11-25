@@ -1,0 +1,25 @@
+# Frontend
+cafeteria-frontend-full/node_modules/
+cafeteria-frontend-full/dist/
+cafeteria-frontend-full/.env
+cafeteria-frontend-full/.env.local
+cafeteria-frontend-full/.env.production
+
+# Backend
+cafeteria-orders-api/target/
+cafeteria-orders-api/.mvn/
+cafeteria-orders-api/mvnw
+cafeteria-orders-api/mvnw.cmd
+cafeteria-orders-api/.idea/
+cafeteria-orders-api/*.iml
+cafeteria-orders-api/.settings/
+cafeteria-orders-api/.project
+cafeteria-orders-api/.classpath
+
+# Logs
+*.log
+*.log.*
+
+# OS
+.DS_Store
+Thumbs.db

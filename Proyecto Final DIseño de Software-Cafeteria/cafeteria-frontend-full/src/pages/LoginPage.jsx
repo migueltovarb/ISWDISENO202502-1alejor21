@@ -9,7 +9,8 @@ export const LoginPage = () => {
     username: '',
     password: '',
     fullName: '',
-    email: ''
+    email: '',
+    role: 'STUDENT' // Por defecto estudiante
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -30,26 +31,47 @@ export const LoginPage = () => {
 
     try {
       const { authAPI } = await import('../services/api')
-      await authAPI.register({
+      
+      console.log('🔵 Registrando usuario con datos:', {
+        username: credentials.username,
+        fullName: credentials.fullName,
+        email: credentials.email,
+        role: credentials.role
+      })
+      
+      const registerResponse = await authAPI.register({
         username: credentials.username,
         password: credentials.password,
         fullName: credentials.fullName,
         email: credentials.email,
-        role: 'EMPLOYEE' // Por defecto los nuevos usuarios son empleados
+        role: credentials.role
       })
+      
+      console.log('✅ Usuario registrado:', registerResponse.data)
 
       // Después de registrarse, hacer login automático
       const result = await login({
         username: credentials.username,
         password: credentials.password
       })
+      
+      console.log('✅ Login automático:', result)
 
       if (result.success) {
-        navigate('/orders')
+        // Redirigir según el rol
+        if (result.user.role === 'ADMIN') {
+          navigate('/products')
+        } else if (result.user.role === 'EMPLOYEE') {
+          navigate('/orders')
+        } else {
+          // STUDENT o STAFF van a hacer pedidos
+          navigate('/orders')
+        }
       } else {
         setError(result.error)
       }
     } catch (err) {
+      console.error('❌ Error en registro:', err)
       setError(err.response?.data?.message || 'Error al registrar usuario')
     }
 
@@ -72,7 +94,10 @@ export const LoginPage = () => {
       // Redirigir según el rol
       if (result.user.role === 'ADMIN') {
         navigate('/products')
+      } else if (result.user.role === 'EMPLOYEE') {
+        navigate('/orders')
       } else {
+        // STUDENT o STAFF
         navigate('/orders')
       }
     } else {
@@ -129,6 +154,25 @@ export const LoginPage = () => {
                   placeholder="tu@email.com"
                   required
                 />
+              </div>
+
+              <div className="form-group">
+                <label className="label">
+                  <span className="label-icon">👥</span>
+                  Tipo de Usuario
+                </label>
+                <select
+                  name="role"
+                  className="input"
+                  value={credentials.role}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="STUDENT">🎓 Estudiante (con promociones)</option>
+                  <option value="STAFF">👔 Personal del Campus</option>
+                  <option value="EMPLOYEE">👤 Empleado/Cajero</option>
+                  <option value="ADMIN">⚙️ Administrador</option>
+                </select>
               </div>
             </>
           )}
@@ -202,7 +246,8 @@ export const LoginPage = () => {
                 username: '',
                 password: '',
                 fullName: '',
-                email: ''
+                email: '',
+                role: 'STUDENT'
               })
             }}
           >

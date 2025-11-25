@@ -71,6 +71,21 @@ public class OrderController {
         return orderService.updateStatus(id, request.getStatus(), request.getChangedBy());
     }
 
+    // Cancelar pedido (solo si está PENDING)
+    @PatchMapping("/{id}/cancel")
+    public Order cancelOrder(@PathVariable String id, @RequestBody CancelRequest request) {
+        Order order = orderService.findById(id);
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new IllegalArgumentException("Solo se pueden cancelar pedidos en estado PENDING");
+        }
+        // Cambiar a un estado cancelado (usaremos DELIVERED con nota)
+        order.setStatus(OrderStatus.PENDING); // Mantener PENDING pero marcar como cancelado
+        order.setCancelled(true);
+        order.setCancelledBy(request.getCancelledBy());
+        order.setCancelReason(request.getReason());
+        return orderService.update(id, order);
+    }
+
     // 🧾 HU010: comprobante del pedido
     @GetMapping("/{id}/receipt")
     public OrderReceiptResponse getReceipt(@PathVariable String id) {
@@ -94,6 +109,12 @@ public class OrderController {
     public static class UpdateStatusRequest {
         private OrderStatus status;
         private String changedBy; // opcional
+    }
+
+    @Data
+    public static class CancelRequest {
+        private String cancelledBy;
+        private String reason;
     }
 
     @Data

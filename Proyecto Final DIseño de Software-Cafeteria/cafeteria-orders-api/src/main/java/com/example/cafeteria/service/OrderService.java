@@ -56,6 +56,12 @@ public class OrderService {
         order.setUpdatedAt(now);
         order.setStatus(OrderStatus.PENDING);
 
+        // Generar número de pedido único
+        order.setOrderNumber(generateOrderNumber());
+
+        // Calcular y asignar turno automáticamente
+        order.setShift(calculateShift(now));
+
         if (order.getItems() == null) {
             order.setItems(new ArrayList<>());
         }
@@ -66,6 +72,11 @@ public class OrderService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         order.setTotalAmount(total.doubleValue());
+
+        // Aplicar descuento para estudiantes frecuentes (5to pedido = 10% descuento)
+        if (order.getCustomerId() != null && !order.getCustomerId().isEmpty()) {
+            applyStudentDiscount(order);
+        }
 
         // Tiempo estimado muy simple
         int baseTime = 5;   // minutos base
@@ -90,6 +101,57 @@ public class OrderService {
         order.getStatusHistory().add(firstChange);
 
         return orderRepository.save(order);
+    }
+
+    // Aplicar descuento a estudiantes frecuentes
+    private void applyStudentDiscount(Order order) {
+        // Contar pedidos completados del cliente
+        List<Order> customerOrders = orderRepository.findAll().stream()
+                .filter(o -> order.getCustomerId().equals(o.getCustomerId()))
+                .filter(o -> o.getStatus() == OrderStatus.DELIVERED)
+                .filter(o -> !o.isCancelled())
+                .toList();
+
+        int completedOrders = customerOrders.size();
+
+        // Cada 5 pedidos completados = 10% descuento en el siguiente
+        if ((completedOrders + 1) % 5 == 0) {
+            double discountPercentage = 10.0;
+            double discountAmount = order.getTotalAmount() * (discountPercentage / 100.0);
+            
+            order.setDiscountPercentage(discountPercentage);
+            order.setDiscountAmount(discountAmount);
+            order.setTotalAmount(order.getTotalAmount() - discountAmount);
+            order.setPromotionDescription("🎉 Descuento estudiante frecuente: " + discountPercentage + "% OFF");
+        }
+    }
+
+    // Generar número de pedido único (ORD-20231124-001)
+    private String generateOrderNumber() {
+        Instant now = Instant.now();
+        String datePart = now.toString().substring(0, 10).replace("-", "");
+        
+        // Contar pedidos del día para generar secuencial
+        Instant startOfDay = now.truncatedTo(java.time.temporal.ChronoUnit.DAYS);
+        Instant endOfDay = startOfDay.plus(1, java.time.temporal.ChronoUnit.DAYS);
+        
+        long todayCount = orderRepository.findByCreatedAtBetween(startOfDay, endOfDay).size();
+        String sequential = String.format("%03d", todayCount + 1);
+        
+        return "ORD-" + datePart + "-" + sequential;
+    }
+
+    // Calcular turno basado en la hora
+    private String calculateShift(Instant time) {
+        int hour = time.atZone(java.time.ZoneId.systemDefault()).getHour();
+        
+        if (hour >= 6 && hour < 14) {
+            return "MAÑANA";
+        } else if (hour >= 14 && hour < 22) {
+            return "TARDE";
+        } else {
+            return "NOCHE";
+        }
     }
 
     // Editar pedido solo si está en PENDING (HU004)
@@ -177,6 +239,26 @@ public class OrderService {
         if (newStatus == OrderStatus.READY) {
             order.setEstimatedTimeMinutes(0);
         }
+
+        return orderRepository.save(order);
+    }
+
+    // Cancelar pedido (solo PENDING)
+    public Order cancelOrder(String orderId, String cancelledBy, String reason) {
+        Order order = findById(orderId);
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new IllegalStateException("Solo se pueden cancelar pedidos en estado PENDING");
+        }
+
+        if (order.isCancelled()) {
+            throw new IllegalStateException("El pedido ya está cancelado");
+        }
+
+        order.setCancelled(true);
+        order.setCancelledBy(cancelledBy);
+        order.setCancelReason(reason);
+        order.setUpdatedAt(Instant.now());
 
         return orderRepository.save(order);
     }

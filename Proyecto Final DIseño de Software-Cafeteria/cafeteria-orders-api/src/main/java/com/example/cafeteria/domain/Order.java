@@ -46,6 +46,13 @@ public class Order {
 
     // promo aplicada si usas promociones
     private String promotionDescription;
+    private Double discountAmount;      // monto del descuento aplicado
+    private Double discountPercentage;  // porcentaje de descuento aplicado
+
+    // Campos de cancelación
+    private boolean cancelled;
+    private String cancelledBy;
+    private String cancelReason;
 
     @Builder.Default
     private List<OrderStatusChange> statusHistory = new ArrayList<>();
